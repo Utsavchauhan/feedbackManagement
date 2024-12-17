@@ -104,12 +104,20 @@ def delete_feedback(feedback_id):
     conn.close()
 
 def validate_user(username, password):
+    """
+    Validate the user and retrieve all user details, including assigned_members.
+    """
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    c.execute("SELECT * FROM users WHERE LOWER(username) = LOWER(?) AND password = ?", (username, password))
+    c.execute("""
+        SELECT username, password, role, team, IFNULL(assigned_members, '')
+        FROM users
+        WHERE LOWER(username) = LOWER(?) AND password = ?
+    """, (username, password))
     user = c.fetchone()
     conn.close()
     return user
+
 
 def check_duplicate_reviewer(username):
     conn = sqlite3.connect(DB_FILE)
@@ -186,7 +194,13 @@ def main():
             if submit:
                 user = validate_user(username, password)
                 if user:
-                    st.session_state.user = {"username": user[0], "role": user[2], "team": user[3]}
+                    # Save all user details into session state
+                    st.session_state.user = {
+                        "username": user[0],
+                        "role": user[2],
+                        "team": user[3],
+                        "assigned_members": user[4]  # Add assigned_members here
+                    }
                     st.success(f"Welcome, {user[0]}!")
                     st.rerun()
                 else:
@@ -206,17 +220,41 @@ def main():
 
         if choice == "Add Feedback":
             st.subheader("Add Feedback")
-            team = user['team'] if user['role'] != 'admin' else st.selectbox("Select Team", ["Hawk Force", "Guarding Tigers", "Speed Demons"])
-            team_members = get_team_members(team)
+
+            # Select team for admins; reviewers have fixed teams
+            team = user['team'] if user['role'] != 'admin' else st.selectbox(
+                "Select Team", ["Hawk Force", "Guarding Tigers", "Speed Demons"]
+            )
+
+            # Fetch team members based on role
+            all_team_members = get_team_members(team)
+
+            if user['role'] == 'reviewer':
+                # Get assigned members from session state
+                assigned_members = user.get('assigned_members', '').split(",")
+                assigned_members_list = [member.strip() for member in assigned_members if member.strip()]
+                # Filter to show only assigned team members
+                team_members = [member for member in all_team_members if member in assigned_members_list]
+            else:
+                team_members = all_team_members
+
+            # Show dropdown if team members are available
             if team_members:
                 team_member = st.selectbox("Select Team Member", team_members)
                 feedback = st.text_area("Feedback Details")
                 status = st.selectbox("Status", ["Pending", "In Progress", "Completed"])
+
+                # Submit feedback
                 if st.button("Submit Feedback"):
                     add_feedback(user['username'], team_member, feedback, team, status)
                     st.success("Feedback submitted successfully!")
             else:
-                st.warning("No team members found for this team.")
+                st.warning("No team members assigned to you or available for this team.")
+
+
+
+
+
 
         elif choice == "View Feedback":
             st.subheader("View Feedback")
