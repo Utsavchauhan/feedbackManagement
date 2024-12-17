@@ -40,6 +40,24 @@ def init_db():
     conn.close()
 
 # ------------------- Database Interaction Functions -------------------
+def add_admin_user():
+    """
+    Add a default admin user if not already present in the database.
+    """
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("SELECT COUNT(*) FROM users WHERE username = 'admin'")
+    admin_exists = c.fetchone()[0]
+
+    if not admin_exists:
+        # Add a default admin user with username 'admin' and password 'admin123'
+        c.execute("""
+            INSERT INTO users (username, password, role, team, assigned_members)
+            VALUES (?, ?, ?, ?, ?)
+        """, ("admin", "admin123", "admin", "all", ""))
+        conn.commit()
+        print("Default admin user added: Username='admin', Password='admin123'")
+    conn.close()
 
 def add_feedback(reviewer, team_member, feedback, team, status):
     conn = sqlite3.connect(DB_FILE)
@@ -150,10 +168,10 @@ def populate_team_members():
     conn.close()
 
 # ------------------- Streamlit UI -------------------
-
 def main():
     st.title("One-to-One Feedback Tracker")
     init_db()
+    add_admin_user()
     populate_team_members()
 
     if "user" not in st.session_state:
@@ -262,45 +280,70 @@ def main():
             st.subheader("Manage Reviewers")
             users_df = get_users()
 
-            # Display Existing Reviewers
+            # Display Existing Users
             if not users_df.empty:
-                st.write("### Existing Reviewers")
-                reviewers_df = users_df[users_df['role'] == 'reviewer']
-                if not reviewers_df.empty:
-                    st.dataframe(reviewers_df)
-                else:
-                    st.warning("No reviewers found.")
+                st.write("### Existing Users")
+                st.dataframe(users_df)
             else:
                 st.warning("No users available.")
 
-            # Team Selection Outside Form
-            team = st.selectbox(
-                "Assign Team",
-                ["Hawk Force", "Guarding Tigers", "Speed Demons"],
-                key="manage_reviewers_team_dropdown"
-            )
+            # Promote User to Admin
+            st.write("### Promote User to Admin")
+            non_admin_users = users_df[users_df['role'] != 'admin']['username'].tolist()
+            if non_admin_users:
+                selected_user_to_promote = st.selectbox(
+                    "Select a User to Promote to Admin",
+                    non_admin_users,
+                    key="promote_user_dropdown"
+                )
 
-            # Fetch Team Members Based on Selected Team
-            team_members = get_team_members(team)
+                if st.button("Promote to Admin"):
+                    conn = sqlite3.connect(DB_FILE)
+                    c = conn.cursor()
+                    c.execute("UPDATE users SET role = 'admin' WHERE username = ?", (selected_user_to_promote,))
+                    conn.commit()
+                    conn.close()
+                    st.success(f"User '{selected_user_to_promote}' has been promoted to admin!")
+                    st.rerun()
+            else:
+                st.info("No non-admin users available to promote.")
 
-            # Form to Add a Reviewer
+            # Demote Admin to Reviewer
+            st.write("### Demote Admin to Reviewer")
+            admin_users = users_df[users_df['role'] == 'admin']['username'].tolist()
+            admin_users.remove('admin')  # Prevent demoting the default admin user
+            if admin_users:
+                selected_user_to_demote = st.selectbox(
+                    "Select an Admin to Demote to Reviewer",
+                    admin_users,
+                    key="demote_user_dropdown"
+                )
+
+                if st.button("Demote to Reviewer"):
+                    conn = sqlite3.connect(DB_FILE)
+                    c = conn.cursor()
+                    c.execute("UPDATE users SET role = 'reviewer' WHERE username = ?", (selected_user_to_demote,))
+                    conn.commit()
+                    conn.close()
+                    st.success(f"User '{selected_user_to_demote}' has been demoted to reviewer!")
+                    st.rerun()
+            else:
+                st.info("No other admins available to demote.")
+
+            # Form to Add a New Reviewer
+            st.write("### Add a New Reviewer")
             with st.form(key="add_reviewer_form"):
                 reviewer_username = st.text_input("Reviewer Username")
                 password = st.text_input("Password", type="password")
+                team = st.selectbox("Assign Team", ["Hawk Force", "Guarding Tigers", "Speed Demons"], key="team_dropdown")
 
-                if team_members:
-                    assigned_members = st.multiselect(
-                        "Assign Team Members",
-                        options=team_members,
-                        key="manage_reviewers_members_multiselect"
-                    )
-                else:
-                    st.warning("No team members found for the selected team.")
-                    assigned_members = []
+                # Fetch and assign team members
+                team_members = get_team_members(team)
+                assigned_members = st.multiselect("Assign Team Members", team_members, key="members_multiselect")
 
                 submit_button = st.form_submit_button("Add Reviewer")
                 if submit_button:
-                    if reviewer_username and password and team:
+                    if reviewer_username and password:
                         success = add_user(reviewer_username, password, "reviewer", team, ",".join(assigned_members))
                         if success:
                             st.success("Reviewer added successfully!")
@@ -309,6 +352,8 @@ def main():
                             st.error("Reviewer with this username already exists.")
                     else:
                         st.error("Please fill in all fields.")
+
+
 
 
 
