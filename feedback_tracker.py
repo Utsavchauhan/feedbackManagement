@@ -56,7 +56,6 @@ def add_admin_user():
             VALUES (?, ?, ?, ?, ?)
         """, ("admin", "admin123", "admin", "all", ""))
         conn.commit()
-        print("Default admin user added: Username='admin', Password='admin123'")
     conn.close()
 
 def add_feedback(reviewer, team_member, feedback, team, status):
@@ -325,74 +324,49 @@ def main():
             else:
                 st.warning("No users available.")
 
-            # Promote User to Admin
-            st.write("### Promote User to Admin")
-            non_admin_users = users_df[users_df['role'] != 'admin']['username'].tolist()
-            if non_admin_users:
-                selected_user_to_promote = st.selectbox(
-                    "Select a User to Promote to Admin",
-                    non_admin_users,
-                    key="promote_user_dropdown"
-                )
+            # Form to Add or Update a Reviewer
+            st.write("### Add or Update a Reviewer")
+            reviewer_username = st.text_input("Reviewer Username")
+            password = st.text_input("Password", type="password")
 
-                if st.button("Promote to Admin"):
-                    conn = sqlite3.connect(DB_FILE)
-                    c = conn.cursor()
-                    c.execute("UPDATE users SET role = 'admin' WHERE username = ?", (selected_user_to_promote,))
-                    conn.commit()
-                    conn.close()
-                    st.success(f"User '{selected_user_to_promote}' has been promoted to admin!")
-                    st.rerun()
-            else:
-                st.info("No non-admin users available to promote.")
+            # Team selection dropdown
+            team = st.selectbox(
+                "Assign Team",
+                ["Hawk Force", "Guarding Tigers", "Speed Demons"],
+                key="select_team"
+            )
 
-            # Demote Admin to Reviewer
-            st.write("### Demote Admin to Reviewer")
-            admin_users = users_df[users_df['role'] == 'admin']['username'].tolist()
-            admin_users.remove('admin')  # Prevent demoting the default admin user
-            if admin_users:
-                selected_user_to_demote = st.selectbox(
-                    "Select an Admin to Demote to Reviewer",
-                    admin_users,
-                    key="demote_user_dropdown"
-                )
-
-                if st.button("Demote to Reviewer"):
-                    conn = sqlite3.connect(DB_FILE)
-                    c = conn.cursor()
-                    c.execute("UPDATE users SET role = 'reviewer' WHERE username = ?", (selected_user_to_demote,))
-                    conn.commit()
-                    conn.close()
-                    st.success(f"User '{selected_user_to_demote}' has been demoted to reviewer!")
-                    st.rerun()
-            else:
-                st.info("No other admins available to demote.")
-
-            # Form to Add a New Reviewer
-            st.write("### Add a New Reviewer")
-            with st.form(key="add_reviewer_form"):
-                reviewer_username = st.text_input("Reviewer Username")
-                password = st.text_input("Password", type="password")
-                team = st.selectbox("Assign Team", ["Hawk Force", "Guarding Tigers", "Speed Demons"], key="team_dropdown")
-
-                # Fetch and assign team members
+            # Fetch team members dynamically based on selected team
+            if team:
                 team_members = get_team_members(team)
-                assigned_members = st.multiselect("Assign Team Members", team_members, key="members_multiselect")
 
-                submit_button = st.form_submit_button("Add Reviewer")
-                if submit_button:
-                    if reviewer_username and password:
-                        success = add_user(reviewer_username, password, "reviewer", team, ",".join(assigned_members))
-                        if success:
-                            st.success("Reviewer added successfully!")
-                            st.rerun()
-                        else:
-                            st.error("Reviewer with this username already exists.")
+                # Get default assigned members if editing an existing reviewer
+                if reviewer_username in users_df['username'].values:
+                    assigned_members_str = users_df.loc[users_df['username'] == reviewer_username, 'assigned_members'].values[0]
+                    assigned_members_list = assigned_members_str.split(",") if assigned_members_str else []
+                else:
+                    assigned_members_list = []
+
+                assigned_members = st.multiselect(
+                    "Assign Team Members",
+                    options=team_members,
+                    default=[member.strip() for member in assigned_members_list if member.strip()],
+                    key=f"assign_members_{team}"
+                )
+            else:
+                st.warning("Please select a team to view members.")
+
+            # Submit button to add or update reviewer
+            if st.button("Save Reviewer"):
+                if reviewer_username and password:
+                    success = add_user(reviewer_username, password, "reviewer", team, ",".join(assigned_members))
+                    if success:
+                        st.success(f"Reviewer '{reviewer_username}' saved successfully!")
+                        st.rerun()
                     else:
-                        st.error("Please fill in all fields.")
-
-
-
+                        st.error(f"Reviewer '{reviewer_username}' already exists.")
+                else:
+                    st.error("Please fill in all fields.")
 
 
         elif choice == "Manage Team Mapping" and user['role'] == 'admin':
@@ -405,8 +379,8 @@ def main():
                 team_members = get_team_members(reviewer_team)
                 current_mapping = users_df.loc[users_df['username'] == selected_reviewer, 'assigned_members'].iloc[0]
                 assigned_members = st.multiselect(
-                    "Assign Team Members", 
-                    team_members, 
+                    "Assign Team Members",
+                    team_members,
                     default=current_mapping.split(",") if current_mapping else []
                 )
 
