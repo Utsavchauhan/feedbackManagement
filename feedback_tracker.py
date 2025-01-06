@@ -267,20 +267,13 @@ def main():
 
             if not df.empty:
                 st.dataframe(df)
-
-                # Export buttons side by side
-                col1 = st.columns(1)
-
-
-                # Export as CSV
-                with col1:
-                    csv = df.to_csv(index=False).encode('utf-8')
-                    st.download_button(
-                        label="Export as CSV",
-                        data=csv,
-                        file_name="feedbacks.csv",
-                        mime="text/csv"
-                    )
+                csv = df.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="Export as CSV",
+                    data=csv,
+                    file_name="feedbacks.csv",
+                    mime="text/csv"
+                )
             else:
                 st.warning("No feedback available.")
 
