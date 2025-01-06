@@ -269,24 +269,11 @@ def main():
                 st.dataframe(df)
 
                 # Export buttons side by side
-                col1, col2 = st.columns(2)
+                col1 = st.columns(1)
 
-                # Export as Excel using pandas built-in function
-                with col1:
-                    buffer = io.BytesIO()
-                    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                        df.to_excel(writer, index=False, sheet_name='Feedbacks')
-                    buffer.seek(0)
-
-                    st.download_button(
-                        label="Export as Excel",
-                        data=buffer,
-                        file_name="feedbacks.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    )
 
                 # Export as CSV
-                with col2:
+                with col1:
                     csv = df.to_csv(index=False).encode('utf-8')
                     st.download_button(
                         label="Export as CSV",
