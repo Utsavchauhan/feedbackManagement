@@ -215,7 +215,7 @@ def main():
 
         menu = ["Add Feedback", "View Feedback", "Update/Delete Feedback"]
         if user['role'] == 'admin':
-            menu.extend(["Manage Reviewers", "Manage Team Mapping"])
+            menu.extend(["Manage Reviewers", "Manage Team Mapping", "SQL Query Tool"])
 
         choice = st.sidebar.selectbox("Menu", menu)
 
@@ -276,7 +276,6 @@ def main():
                 )
             else:
                 st.warning("No feedback available.")
-
 
         elif choice == "Update/Delete Feedback":
             st.subheader("Update/Delete Feedback")
@@ -418,6 +417,60 @@ def main():
                     st.rerun()
             else:
                 st.warning("No reviewers available to map.")
+        elif choice == "SQL Query Tool" and user['role'] == 'admin':
+            st.subheader("SQL Query Tool")
+
+            # Connect to the database
+            conn = sqlite3.connect(DB_FILE)
+
+            # Get the list of tables in the database
+            tables = pd.read_sql_query("SELECT name FROM sqlite_master WHERE type='table';", conn)['name'].tolist()
+
+            # Dropdown to select a table
+            selected_table = st.selectbox("Select a Table to Query", tables)
+
+            # Display table data
+            if selected_table:
+                st.write(f"### Table: {selected_table}")
+                table_data = pd.read_sql_query(f"SELECT * FROM {selected_table};", conn)
+                st.write("**Table Data:**")
+                st.dataframe(table_data)
+
+            # Text area to input SQL query
+            query = st.text_area("Enter your SQL query:", value=f"SELECT * FROM {selected_table};" if selected_table else "")
+
+            if st.button("Run Query"):
+                try:
+                    result = pd.read_sql_query(query, conn)
+                    st.write(result)
+
+                    # Export query results as Excel
+                    buffer = io.BytesIO()
+                    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                        result.to_excel(writer, index=False, sheet_name='QueryResults')
+                    buffer.seek(0)
+
+                    st.download_button(
+                        label="Export as Excel",
+                        data=buffer,
+                        file_name="query_results.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
+
+                    # Export query results as CSV
+                    csv = result.to_csv(index=False).encode('utf-8')
+                    st.download_button(
+                        label="Export as CSV",
+                        data=csv,
+                        file_name="query_results.csv",
+                        mime="text/csv"
+                    )
+                except Exception as e:
+                    st.error(f"Error: {e}")
+
+            conn.close()
+
+
 
 if __name__ == "__main__":
     main()
